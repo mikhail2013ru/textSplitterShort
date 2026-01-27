@@ -28,6 +28,7 @@
             align-items: center;
             margin-bottom: 25px;
             gap: 12px;
+            position: relative;
         }
 
         .inpText p {
@@ -37,7 +38,7 @@
         }
 
         .inputNum {
-            width: 80px;
+            width: 100px;
             height: 36px;
             padding: 0 10px;
             border: 2px solid #4CAF50;
@@ -53,6 +54,23 @@
             outline: none;
             border-color: #2E7D32;
             box-shadow: 0 4px 10px rgba(76, 175, 80, 0.25);
+        }
+
+        .tooltip {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            background: #333;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 14px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-5px);
+            transition: opacity 0.2s, transform 0.2s;
+            z-index: 10;
         }
 
         .section-width {
@@ -79,7 +97,6 @@
             overflow-y: auto;
         }
 
-        /* textOutputTemp: фон меняется при наличии текста */
         #textOutputTemp.empty {
             background-color: white;
         }
@@ -141,28 +158,43 @@
             min-width: 220px;
         }
 
-        .toggle-btn {
+        .toggle-btn, .clear-btn {
             padding: 6px 12px;
             font-size: 13px;
             border: none;
             border-radius: 6px;
             cursor: pointer;
-            background: #e0e0e0;
-            color: #333;
-            transition: background 0.2s, color 0.2s;
+            transition: all 0.2s;
             white-space: nowrap;
         }
 
-        .toggle-btn:hover {
-            background: #4CAF50;
+        .toggle-btn {
+            background: #bbdefb;
+            color: #0d47a1;
+        }
+        .toggle-btn:hover:not(:disabled) {
+            background: #2196F3;
             color: white;
         }
+        .toggle-btn:disabled {
+            background: #e0e0e0;
+            color: #999;
+            cursor: not-allowed;
+        }
 
-        .toggle-btn.expand { background: #bbdefb; }
-        .toggle-btn.collapse { background: #ffccbc; }
-
-        .toggle-btn.expand:hover { background: #2196F3; color: white; }
-        .toggle-btn.collapse:hover { background: #f44336; color: white; }
+        .clear-btn {
+            background: #ffccbc;
+            color: #bf360c;
+        }
+        .clear-btn:hover:not(:disabled) {
+            background: #f44336;
+            color: white;
+        }
+        .clear-btn:disabled {
+            background: #e0e0e0;
+            color: #999;
+            cursor: not-allowed;
+        }
 
         .section-title {
             width: 1100px;
@@ -173,9 +205,23 @@
             padding-left: 4px;
         }
 
+        /* Чекбокс под результатом, справа */
+        .checkbox-container {
+            width: 1100px;
+            margin: 16px 0; /* отступ сверху и снизу */
+            display: flex;
+            justify-content: flex-end; /* выравнивание по правому краю */
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-container input {
+            transform: scale(1.2);
+        }
+
         .textOutputResult {
             width: 1100px;
-            min-height: 250px; /* ← по умолчанию */
+            min-height: 250px;
             height: auto;
             padding: 20px;
             background: white;
@@ -187,7 +233,7 @@
         }
 
         .textOutputResult.has-content {
-            min-height: 500px; /* ← при наличии контента */
+            min-height: 500px;
         }
 
         .block-wrapper {
@@ -228,6 +274,34 @@
             font-weight: bold;
         }
 
+        #notifications {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .notification {
+            background: #4CAF50;
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            margin-bottom: 10px;
+            opacity: 0;
+            transform: translateX(100%);
+            animation: slideIn 0.3s forwards, fadeOut 0.5s 2.5s forwards;
+            max-width: 300px;
+            font-weight: 500;
+        }
+
+        @keyframes slideIn {
+            to { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fadeOut {
+            to { opacity: 0; transform: translateX(100%); }
+        }
+
         ::-webkit-scrollbar {
             width: 8px;
         }
@@ -246,8 +320,9 @@
 </head>
 <body>
     <div class="inpText">
-        <p>Ввести число символов:</p>
-        <input type="text" class="inputNum" placeholder="200" />
+        <p>Количество символов, на которое нужно разделить текст:</p>
+        <input type="text" class="inputNum" id="inputNum" />
+        <div class="tooltip" id="tooltip">Введите, например, 1000 знаков</div>
     </div>
 
     <!-- Верхняя секция -->
@@ -261,8 +336,8 @@
                 <div class="char-counter-value" id="charCount">0</div>
             </div>
             <div class="toggle-buttons">
-                <button class="toggle-btn expand" data-target="textInput">Развернуть</button>
-                <button class="toggle-btn collapse" data-target="textInput">Скрыть</button>
+                <button class="toggle-btn" id="toggleBtn" disabled>Развернуть</button>
+                <button class="clear-btn" id="clearBtn" disabled>Очистить текст</button>
             </div>
         </div>
     </div>
@@ -274,8 +349,7 @@
             <textarea id="textOutputTemp" class="textOutputTemp empty" placeholder="Промежуточный результат..."></textarea>
         </div>
         <div class="toggle-buttons">
-            <button class="toggle-btn expand" data-target="textOutputTemp">Развернуть</button>
-            <button class="toggle-btn collapse" data-target="textOutputTemp">Скрыть</button>
+            <button class="toggle-btn" id="toggleBtn2" disabled>Развернуть</button>
         </div>
     </div>
 
@@ -283,14 +357,28 @@
     <div class="section-title">Обработанные предложения, с разделением по блокам</div>
     <div class="textOutputResult" id="textOutputResult"></div>
 
+    <!-- Чекбокс ПОД блоками, справа -->
+    <div class="checkbox-container">
+        <input type="checkbox" id="deleteOnCopy" />
+        <label for="deleteOnCopy">Удалять блок со скопированным текстом</label>
+    </div>
+
+    <div id="notifications"></div>
+
     <script>
-        const inputNum = document.querySelector('.inputNum');
+        const inputNum = document.getElementById('inputNum');
         const textInput = document.getElementById('textInput');
         const textOutputTemp = document.getElementById('textOutputTemp');
         const textOutputResult = document.getElementById('textOutputResult');
         const charCountElement = document.getElementById('charCount');
+        const toggleBtn = document.getElementById('toggleBtn');
+        const toggleBtn2 = document.getElementById('toggleBtn2');
+        const clearBtn = document.getElementById('clearBtn');
+        const deleteOnCopyCheckbox = document.getElementById('deleteOnCopy');
+        const tooltip = document.getElementById('tooltip');
 
-        // Обновление фона textOutputTemp
+        let currentCopiedBlock = null;
+
         const updateTextOutputTempBackground = () => {
             if (textOutputTemp.value.trim() === '') {
                 textOutputTemp.classList.add('empty');
@@ -299,7 +387,6 @@
             }
         };
 
-        // Обновление высоты textOutputResult
         const updateTextOutputResultHeight = () => {
             if (textOutputResult.children.length > 0) {
                 textOutputResult.classList.add('has-content');
@@ -390,12 +477,23 @@
                 blockDiv.textContent = block;
 
                 blockDiv.addEventListener('click', function () {
+                    if (deleteOnCopyCheckbox.checked && currentCopiedBlock && currentCopiedBlock !== this) {
+                        const parent = currentCopiedBlock.closest('.block-wrapper');
+                        if (parent) parent.remove();
+                        currentCopiedBlock = null;
+                    }
+
                     if (this.classList.contains('copied')) {
                         this.classList.remove('copied');
+                        if (currentCopiedBlock === this) currentCopiedBlock = null;
                     } else {
-                        navigator.clipboard.writeText(this.textContent.trim());
                         this.classList.add('copied');
+                        currentCopiedBlock = this;
+                        navigator.clipboard.writeText(this.textContent.trim());
+                        showNotification("Текст скопирован в буфер обмена");
                     }
+
+                    updateTextOutputResultHeight();
                 });
 
                 wrapper.appendChild(countDiv);
@@ -403,30 +501,46 @@
                 textOutputResult.appendChild(wrapper);
             });
 
-            updateTextOutputResultHeight(); // ← обновляем высоту после рендера
+            updateTextOutputResultHeight();
+        };
+
+        const showNotification = (message) => {
+            const notifications = document.getElementById('notifications');
+            while (notifications.firstChild) {
+                notifications.removeChild(notifications.firstChild);
+            }
+            const notif = document.createElement('div');
+            notif.className = 'notification';
+            notif.textContent = message;
+            notifications.appendChild(notif);
         };
 
         const handleTextInput = () => {
+            const hasText = textInput.value.trim() !== '';
+            toggleBtn.disabled = !hasText;
+            clearBtn.disabled = !hasText;
+            toggleBtn2.disabled = !hasText;
+
             updateCharCount();
-            const text = textInput.value.trim();
-            if (!text) {
+            if (!hasText) {
                 textOutputTemp.value = '';
                 textOutputResult.innerHTML = '';
                 updateTextOutputTempBackground();
                 updateTextOutputResultHeight();
                 return;
             }
-            const chunks = splitTextIntoChunks(text, 200);
+            const chunks = splitTextIntoChunks(textInput.value, 200);
             textOutputTemp.value = chunks.join('\n\n');
             updateTextOutputTempBackground();
+
             const num = parseInt(inputNum.value);
             if (num) splitIntoBlocks(textOutputTemp.value, num);
         };
 
-        const handleInputNumOrTextOutputTemp = () => {
+        const handleInputNumChange = () => {
             const num = parseInt(inputNum.value);
             const text = textOutputTemp.value.trim();
-            if (num && text) {
+            if (num && text && textInput.value.trim() !== '') {
                 splitIntoBlocks(text, num);
             } else {
                 textOutputResult.innerHTML = '';
@@ -441,29 +555,77 @@
             } else {
                 navigator.clipboard.writeText(this.value);
                 this.classList.add('copied');
+                showNotification("Текст скопирован в буфер обмена");
             }
         });
 
-        document.querySelectorAll('.toggle-btn').forEach(btn => {
+        // 🔥 Адаптивное разворачивание
+        const setupToggle = (btn, targetId) => {
+            let isExpanded = false;
             btn.addEventListener('click', () => {
-                const targetId = btn.dataset.target;
                 const textarea = document.getElementById(targetId);
-                if (btn.classList.contains('expand')) {
-                    textarea.style.height = '100vh';
-                } else {
+                if (isExpanded) {
+                    // Скрыть → 250px
                     textarea.style.height = '250px';
+                    btn.textContent = 'Развернуть';
+                } else {
+                    // Развернуть → адаптивно
+                    textarea.style.height = 'auto';
+                    const scrollHeight = textarea.scrollHeight;
+                    const maxHeight = Math.min(scrollHeight, window.innerHeight * 0.95); // чуть меньше 100vh
+                    textarea.style.height = `${maxHeight}px`;
+                    btn.textContent = 'Скрыть';
                 }
+                isExpanded = !isExpanded;
             });
+        };
+
+        setupToggle(toggleBtn, 'textInput');
+        setupToggle(toggleBtn2, 'textOutputTemp');
+
+        clearBtn.addEventListener('click', () => {
+            textInput.value = '';
+            handleTextInput();
+            inputNum.value = '';
+        });
+
+        let tooltipTimeout = null;
+        inputNum.addEventListener('mouseenter', () => {
+            tooltip.style.opacity = '1';
+            tooltip.style.transform = 'translateY(0)';
+            if (tooltipTimeout) clearTimeout(tooltipTimeout);
+            tooltipTimeout = setTimeout(() => {
+                tooltip.style.opacity = '0';
+                tooltip.style.transform = 'translateY(-5px)';
+            }, 3000);
+        });
+
+        inputNum.addEventListener('mouseleave', () => {
+            if (tooltipTimeout) clearTimeout(tooltipTimeout);
+            tooltip.style.opacity = '0';
+            tooltip.style.transform = 'translateY(-5px)';
+        });
+
+        inputNum.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && textInput.value.trim() !== '') {
+                handleInputNumChange();
+            }
+        });
+
+        inputNum.addEventListener('blur', () => {
+            if (textInput.value.trim() !== '') {
+                handleInputNumChange();
+            }
         });
 
         textInput.addEventListener('input', handleTextInput);
         textOutputTemp.addEventListener('input', () => {
             updateTextOutputTempBackground();
-            handleInputNumOrTextOutputTemp();
+            if (textInput.value.trim() !== '') {
+                handleInputNumChange();
+            }
         });
-        inputNum.addEventListener('input', handleInputNumOrTextOutputTemp);
 
-        // Инициализация
         updateCharCount();
         updateTextOutputTempBackground();
         updateTextOutputResultHeight();
