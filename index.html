@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -41,36 +41,38 @@
             width: 100px;
             height: 36px;
             padding: 0 10px;
-            border: 2px solid #4CAF50;
+            border: 2px solid #ccc;
             border-radius: 8px;
             font-size: 16px;
             text-align: center;
             transition: all 0.3s ease;
             background-color: white;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            color: #999;
         }
 
         .inputNum:focus {
             outline: none;
-            border-color: #2E7D32;
+            border-color: #4CAF50;
             box-shadow: 0 4px 10px rgba(76, 175, 80, 0.25);
+            color: #333;
         }
 
-        .tooltip {
+        .inputNum:not(:placeholder-shown) {
+            color: #333;
+            border-color: #4CAF50;
+        }
+
+        .input-error {
+            color: #f44336;
+            font-size: 14px;
+            margin-top: 4px;
+            display: none;
             position: absolute;
             top: 100%;
             left: 0;
-            background: #333;
-            color: white;
-            padding: 6px 10px;
-            border-radius: 6px;
-            font-size: 14px;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transform: translateY(-5px);
-            transition: opacity 0.2s, transform 0.2s;
-            z-index: 10;
+            width: 100%;
+            text-align: center;
         }
 
         .section-width {
@@ -205,18 +207,26 @@
             padding-left: 4px;
         }
 
-        /* Чекбокс под результатом, справа */
+        /* Чекбокс между заголовком и блоками, слева - улучшенное выравнивание */
         .checkbox-container {
             width: 1100px;
-            margin: 16px 0; /* отступ сверху и снизу */
+            margin: 8px 0 16px 4px;
             display: flex;
-            justify-content: flex-end; /* выравнивание по правому краю */
             align-items: center;
             gap: 8px;
         }
 
         .checkbox-container input {
             transform: scale(1.2);
+            margin-right: 4px;
+        }
+
+        .section-with-checkbox {
+            width: 1100px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 8px;
         }
 
         .textOutputResult {
@@ -266,7 +276,6 @@
 
         .OuterText:hover {
             background-color: #f0f9f1;
-            transform: translateX(4px);
         }
 
         .OuterText.copied {
@@ -321,8 +330,8 @@
 <body>
     <div class="inpText">
         <p>Количество символов, на которое нужно разделить текст:</p>
-        <input type="text" class="inputNum" id="inputNum" />
-        <div class="tooltip" id="tooltip">Введите, например, 1000 знаков</div>
+        <input type="text" class="inputNum" id="inputNum" placeholder="0" />
+        <div class="input-error" id="inputError">Необходимо ввести число или нажмите Enter</div>
     </div>
 
     <!-- Верхняя секция -->
@@ -353,20 +362,25 @@
         </div>
     </div>
 
-    <!-- Обработанные блоки -->
-    <div class="section-title">Обработанные предложения, с разделением по блокам</div>
-    <div class="textOutputResult" id="textOutputResult"></div>
-
-    <!-- Чекбокс ПОД блоками, справа -->
-    <div class="checkbox-container">
-        <input type="checkbox" id="deleteOnCopy" />
-        <label for="deleteOnCopy">Удалять блок со скопированным текстом</label>
+    <!-- Обработанные предложения, с разделением по блокам -->
+    <div class="section-with-checkbox">
+        <!-- Обработанные предложения, с разделением по блокам -->
+        <div class="section-title">Обработанные предложения, с разделением по блокам</div>
+        
+        <!-- Чекбокс ПЕРЕМЕЩЁН СЮДА: между заголовком и блоками, слева -->
+        <div class="checkbox-container">
+            <input type="checkbox" id="deleteOnCopy" />
+            <label for="deleteOnCopy">Удалять блок со скопированным текстом</label>
+        </div>
     </div>
+
+    <div class="textOutputResult" id="textOutputResult"></div>
 
     <div id="notifications"></div>
 
     <script>
         const inputNum = document.getElementById('inputNum');
+        const inputError = document.getElementById('inputError');
         const textInput = document.getElementById('textInput');
         const textOutputTemp = document.getElementById('textOutputTemp');
         const textOutputResult = document.getElementById('textOutputResult');
@@ -375,10 +389,29 @@
         const toggleBtn2 = document.getElementById('toggleBtn2');
         const clearBtn = document.getElementById('clearBtn');
         const deleteOnCopyCheckbox = document.getElementById('deleteOnCopy');
-        const tooltip = document.getElementById('tooltip');
 
         let currentCopiedBlock = null;
+        let isProcessing = false; // Флаг для предотвращения повторной обработки
 
+        // ============ КОНСТАНТЫ И КОНФИГУРАЦИЯ ============
+        const OPTIMAL_CHUNK_SIZE = 600;
+        const MIN_CHUNK_SIZE = 50;
+        const MAX_CHUNK_SIZE = 800;
+
+        // Слова, на которых нельзя разрывать предложение
+        const NO_BREAK_WORDS = new Set([
+            'в', 'в+', 'на', 'н+а', 'при', 'пр+и', 'у', 'у+', 'за', 'з+а', 
+            'над', 'н+ад', 'под', 'п+од', 'к', 'к+', 'по', 'п+о', 'с', 'с+',
+            'от', '+от', 'без', 'б+ез', 'для', 'дл+я', 'до', 'д+о', 'из', '+из',
+            'о', '+о', 'об', '+об', 'про', 'пр+о', 'со', 'с+о', 'во', 'в+о',
+            'и', '+и', 'а', '+а', 'но', 'н+о', 'или', 'и+ли', 'что', 'чт+о',
+            'как', 'к+ак', 'чтобы', 'чт+обы', 'если', '+есл+и', 'когда', 'когд+а',
+            'ли', 'л+и', 'бы', 'б+ы', 'б', 'же', 'ж+е', 'ж', 'ни', 'н+и',
+            'я', 'я+', 'ты', 'т+ы', 'он', '+он', 'она', 'он+а', 'оно', 'он+о',
+            'мы', 'м+ы', 'вы', 'в+ы', 'они', 'он+и'
+        ]);
+
+        // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
         const updateTextOutputTempBackground = () => {
             if (textOutputTemp.value.trim() === '') {
                 textOutputTemp.classList.add('empty');
@@ -404,65 +437,171 @@
             else charCountElement.style.color = '#F44336';
         };
 
-        const addDotIfNeeded = (sentence) => {
-            const trimmed = sentence.trim();
-            if (!trimmed) return trimmed;
-            const lastChar = trimmed.slice(-1);
-            return ['.', '!', '?'].includes(lastChar) ? trimmed : trimmed + '.';
+        const showNotification = (message) => {
+            const notifications = document.getElementById('notifications');
+            while (notifications.firstChild) {
+                notifications.removeChild(notifications.firstChild);
+            }
+            const notif = document.createElement('div');
+            notif.className = 'notification';
+            notif.textContent = message;
+            notifications.appendChild(notif);
         };
 
-        const splitTextIntoChunks = (text, chunkSize = 200) => {
+        // ============ ИСПРАВЛЕННАЯ ПУНКТУАЦИЯ ============
+        const cleanPunctuation = (text) => {
+            if (!text || !text.trim()) return text;
+            
+            let result = text.trim();
+            
+            result = result
+                .replace(/\.\s*,/g, ',')
+                .replace(/,\s*\.(?!\d)/g, '.')
+                .replace(/\.\s*\./g, '.')
+                .replace(/\.\.$/g, '.')
+                .replace(/([а-яё]+)\.([а-яё]+)\.([а-яё]+)/gi, (match, p1, p2, p3) => {
+                    const combined = p1 + p2 + p3;
+                    const wordLength = combined.length;
+                    return wordLength >= 3 && wordLength <= 15 ? combined : match;
+                })
+                .replace(/([а-яё]+)\.([а-яё]+)/gi, (match, p1, p2) => {
+                    const combined = p1 + p2;
+                    const wordLength = combined.length;
+                    return wordLength >= 3 && wordLength <= 15 ? combined : match;
+                })
+                .replace(/,\s*\.(?!\s)/g, ',')
+                .replace(/потому\s*,\s*что/gi, 'потому что')
+                .replace(/([а-яё]+),\.\s*\.—/gi, '$1, —')
+                .replace(/([а-яё]+)\.\s*\.—/gi, '$1. —')
+                .replace(/\.\s*,/g, ',')
+                .replace(/\.{3,}/g, '...')
+                .replace(/\s+/g, ' ')
+                .trim();
+            
+            result = result.replace(/—\s*([^—.!?]+),\./g, '— $1.');
+            result = result.replace(/—\s*([^—.!?]+)\.\./g, '— $1.');
+            
+            const endsWithPunctuation = /[.!?…]$/.test(result);
+            if (!endsWithPunctuation && result.length > 0) {
+                const lastChar = result.slice(-1);
+                if (/[а-яёa-z0-9]/i.test(lastChar)) {
+                    result += '.';
+                }
+            }
+            
+            if (result.length > 30) {
+                result = result.replace(/([а-яё])\s+что\s+/gi, '$1 что ');
+            }
+            
+            result = result
+                .replace(/\s+([.,!?…])/g, '$1')
+                .replace(/([.,!?…])(?=[А-ЯЁA-Z])/g, '$1 ')
+                .replace(/т\.\s*е\./gi, 'т.е.')
+                .replace(/и\s*т\.\s*д\./gi, 'и т.д.')
+                .replace(/и\s*т\.\s*п\./gi, 'и т.п.')
+                .trim();
+            
+            return result;
+        };
+
+        const postProcessChunks = (chunks) => {
+            const result = [];
+            for (let i = 0; i < chunks.length; i++) {
+                let chunk = chunks[i];
+                chunk = cleanPunctuation(chunk);
+                if (chunk.length < MIN_CHUNK_SIZE && i < chunks.length - 1) {
+                    const nextChunk = chunks[i + 1];
+                    const combined = chunk.replace(/[.!?…]$/, '') + ' ' + nextChunk;
+                    if (combined.length <= MAX_CHUNK_SIZE) {
+                        result.push(cleanPunctuation(combined));
+                        i++;
+                        continue;
+                    }
+                }
+                if (!/[.!?…]$/.test(chunk) && chunk.length > 10) {
+                    const lastChar = chunk.slice(-1);
+                    if (/[а-яёa-z0-9]/i.test(lastChar)) {
+                        chunk += '.';
+                    }
+                }
+                result.push(chunk);
+            }
+            return result;
+        };
+
+        const splitTextWithPunctuation = (text, chunkSize = 600) => {
             const chunks = [];
-            const sentences = text.match(/[^.!?]*[.!?]+/g) || [text];
+            text = cleanPunctuation(text);
+            const sentenceRegex = /[^.!?…]*[.!?…]+(?=\s|$)/g;
+            const sentences = text.match(sentenceRegex) || [text];
+            
             sentences.forEach(sentence => {
                 sentence = sentence.trim();
                 if (!sentence) return;
-                if (sentence.length < 150) {
-                    chunks.push(addDotIfNeeded(sentence));
+                if (sentence.length <= chunkSize) {
+                    chunks.push(sentence);
                     return;
                 }
-                const words = sentence.split(" ");
-                let part = "";
-                for (const [index, word] of words.entries()) {
-                    const testPart = part ? `${part} ${word}` : word;
-                    const remainingWords = words.slice(index + 1);
-                    const remainingText = remainingWords.join(" ");
-                    if (testPart.length <= chunkSize && testPart.length >= 50 && remainingText.length >= 50) {
-                        part = testPart;
-                    } else {
-                        if (part && part.length >= 50 && remainingText.length >= 50) {
-                            chunks.push(addDotIfNeeded(part));
-                            part = word;
-                        } else {
-                            const mid = Math.ceil(words.length / 2);
-                            chunks.push(addDotIfNeeded(words.slice(0, mid).join(" ")));
-                            chunks.push(addDotIfNeeded(words.slice(mid).join(" ")));
-                            return;
+                const words = sentence.split(/\s+/);
+                let currentChunk = [];
+                let currentText = '';
+                for (let i = 0; i < words.length; i++) {
+                    const word = words[i];
+                    const testText = currentText ? `${currentText} ${word}` : word;
+                    if (testText.length > chunkSize * 0.8) {
+                        let breakPosition = -1;
+                        for (let j = currentChunk.length - 1; j >= 0; j--) {
+                            const chunkWord = currentChunk[j];
+                            if (chunkWord.match(/[,;:—.!?…]$/)) {
+                                breakPosition = j;
+                                break;
+                            }
+                        }
+                        if (breakPosition === -1) {
+                            for (let j = currentChunk.length - 1; j >= 0; j--) {
+                                const chunkWord = currentChunk[j].replace(/[,.!?;:—]/g, '').toLowerCase();
+                                if (chunkWord.length >= 3 && !NO_BREAK_WORDS.has(chunkWord)) {
+                                    breakPosition = j;
+                                    break;
+                                }
+                            }
+                        }
+                        if (breakPosition > 0 && breakPosition < currentChunk.length) {
+                            const chunkText = currentChunk.slice(0, breakPosition + 1).join(' ');
+                            chunks.push(chunkText);
+                            currentChunk = currentChunk.slice(breakPosition + 1);
+                            currentText = currentChunk.join(' ');
                         }
                     }
+                    currentChunk.push(word);
+                    currentText = currentChunk.join(' ');
                 }
-                if (part) chunks.push(addDotIfNeeded(part));
+                if (currentText.length >= MIN_CHUNK_SIZE) {
+                    chunks.push(currentText);
+                } else if (currentText.length > 0 && chunks.length > 0) {
+                    const lastChunk = chunks.pop();
+                    const combined = lastChunk + ' ' + currentText;
+                    chunks.push(combined);
+                }
             });
-            return chunks;
+            return postProcessChunks(chunks);
         };
 
         const splitIntoBlocks = (text, maxSize) => {
             textOutputResult.innerHTML = '';
-            const sentences = text.match(/[^.!?]*[.!?]+/g) || [text];
+            const chunks = splitTextWithPunctuation(text, maxSize);
             const blocks = [];
             let currentBlock = '';
-            sentences.forEach(sentence => {
-                sentence = sentence.trim();
-                if (!sentence) return;
-                const testBlock = currentBlock ? `${currentBlock} ${sentence}` : sentence;
+            chunks.forEach(chunk => {
+                const testBlock = currentBlock ? `${currentBlock} ${chunk}` : chunk;
                 if (testBlock.length <= maxSize) {
                     currentBlock = testBlock;
                 } else {
-                    if (currentBlock) blocks.push(addDotIfNeeded(currentBlock));
-                    currentBlock = sentence;
+                    if (currentBlock) blocks.push(cleanPunctuation(currentBlock));
+                    currentBlock = chunk;
                 }
             });
-            if (currentBlock) blocks.push(addDotIfNeeded(currentBlock));
+            if (currentBlock) blocks.push(cleanPunctuation(currentBlock));
 
             blocks.forEach((block, i) => {
                 const wrapper = document.createElement('div');
@@ -475,6 +614,11 @@
                 const blockDiv = document.createElement('div');
                 blockDiv.className = 'OuterText';
                 blockDiv.textContent = block;
+
+                const lengthSpan = document.createElement('span');
+                lengthSpan.style.cssText = 'float: right; font-size: 12px; color: #666; margin-left: 10px;';
+                lengthSpan.textContent = `${block.length} симв.`;
+                blockDiv.appendChild(lengthSpan);
 
                 blockDiv.addEventListener('click', function () {
                     if (deleteOnCopyCheckbox.checked && currentCopiedBlock && currentCopiedBlock !== this) {
@@ -489,7 +633,8 @@
                     } else {
                         this.classList.add('copied');
                         currentCopiedBlock = this;
-                        navigator.clipboard.writeText(this.textContent.trim());
+                        const textToCopy = this.textContent.replace(/\s*\d+ симв\.\s*$/, '').trim();
+                        navigator.clipboard.writeText(textToCopy);
                         showNotification("Текст скопирован в буфер обмена");
                     }
 
@@ -504,75 +649,86 @@
             updateTextOutputResultHeight();
         };
 
-        const showNotification = (message) => {
-            const notifications = document.getElementById('notifications');
-            while (notifications.firstChild) {
-                notifications.removeChild(notifications.firstChild);
-            }
-            const notif = document.createElement('div');
-            notif.className = 'notification';
-            notif.textContent = message;
-            notifications.appendChild(notif);
-        };
+        // ============ ОСНОВНАЯ ФУНКЦИЯ ОБРАБОТКИ ============
+        const processText = (forceFullProcess = false) => {
+            if (isProcessing) return;
+            isProcessing = true;
 
-        const handleTextInput = () => {
-            const hasText = textInput.value.trim() !== '';
-            toggleBtn.disabled = !hasText;
-            clearBtn.disabled = !hasText;
-            toggleBtn2.disabled = !hasText;
+            const text = textInput.value.trim();
+            const numValue = inputNum.value.trim();
 
-            updateCharCount();
-            if (!hasText) {
-                textOutputTemp.value = '';
-                textOutputResult.innerHTML = '';
-                updateTextOutputTempBackground();
-                updateTextOutputResultHeight();
+            // Очищаем предыдущие результаты
+            textOutputTemp.value = '';
+            textOutputResult.innerHTML = '';
+            updateTextOutputTempBackground();
+            updateTextOutputResultHeight();
+
+            if (!text) {
+                isProcessing = false;
                 return;
             }
-            const chunks = splitTextIntoChunks(textInput.value, 200);
-            textOutputTemp.value = chunks.join('\n\n');
+
+            // Если forceFullProcess = false (при вводе текста), проверяем значение
+            if (!forceFullProcess) {
+                // Если введено "0" или пустое значение - только промежуточный результат
+                if (!numValue || numValue === '0') {
+                    const chunks = splitTextWithPunctuation(text, OPTIMAL_CHUNK_SIZE);
+                    const numberedChunks = chunks.map((chunk, i) => `${i + 1}. ${chunk}`);
+                    textOutputTemp.value = numberedChunks.join('\n\n');
+                    updateTextOutputTempBackground();
+                    isProcessing = false;
+                    return;
+                }
+            }
+
+            // Проверяем валидность числа
+            if (!numValue || isNaN(numValue) || parseInt(numValue) <= 0) {
+                inputError.style.display = 'block';
+                isProcessing = false;
+                return;
+            }
+
+            inputError.style.display = 'none';
+
+            const num = parseInt(numValue);
+
+            // Разделяем текст на блоки и заполняем оба поля
+            const chunks = splitTextWithPunctuation(text, num);
+            const numberedChunks = chunks.map((chunk, i) => `${i + 1}. ${chunk}`);
+            textOutputTemp.value = numberedChunks.join('\n\n');
             updateTextOutputTempBackground();
 
-            const num = parseInt(inputNum.value);
-            if (num) splitIntoBlocks(textOutputTemp.value, num);
+            splitIntoBlocks(text, num);
+
+            isProcessing = false;
         };
 
-        const handleInputNumChange = () => {
-            const num = parseInt(inputNum.value);
-            const text = textOutputTemp.value.trim();
-            if (num && text && textInput.value.trim() !== '') {
-                splitIntoBlocks(text, num);
-            } else {
-                textOutputResult.innerHTML = '';
-                updateTextOutputResultHeight();
-            }
-        };
-
+        // ============ ОБРАБОТЧИКИ СОБЫТИЙ ============
+        // 🔥 КЛИК ПО textOutputTemp: КОПИРОВАТЬ БЕЗ НУМЕРАЦИИ
         textOutputTemp.addEventListener('click', function () {
             if (!this.value.trim()) return;
             if (this.classList.contains('copied')) {
                 this.classList.remove('copied');
             } else {
-                navigator.clipboard.writeText(this.value);
+                // Удаляем нумерацию: "1. Текст" → "Текст"
+                const textWithoutNumbers = this.value.replace(/^\d+\.\s*/gm, '');
+                navigator.clipboard.writeText(textWithoutNumbers);
                 this.classList.add('copied');
-                showNotification("Текст скопирован в буфер обмена");
+                showNotification("Текст (без номеров) скопирован в буфер обмена");
             }
         });
 
-        // 🔥 Адаптивное разворачивание
         const setupToggle = (btn, targetId) => {
             let isExpanded = false;
             btn.addEventListener('click', () => {
                 const textarea = document.getElementById(targetId);
                 if (isExpanded) {
-                    // Скрыть → 250px
                     textarea.style.height = '250px';
                     btn.textContent = 'Развернуть';
                 } else {
-                    // Развернуть → адаптивно
                     textarea.style.height = 'auto';
                     const scrollHeight = textarea.scrollHeight;
-                    const maxHeight = Math.min(scrollHeight, window.innerHeight * 0.95); // чуть меньше 100vh
+                    const maxHeight = Math.min(scrollHeight, window.innerHeight * 0.95);
                     textarea.style.height = `${maxHeight}px`;
                     btn.textContent = 'Скрыть';
                 }
@@ -585,47 +741,85 @@
 
         clearBtn.addEventListener('click', () => {
             textInput.value = '';
-            handleTextInput();
+            textOutputTemp.value = '';
+            textOutputResult.innerHTML = '';
             inputNum.value = '';
+            inputError.style.display = 'none';
+            
+            updateCharCount();
+            updateTextOutputTempBackground();
+            updateTextOutputResultHeight();
+            
+            toggleBtn.disabled = true;
+            clearBtn.disabled = true;
+            toggleBtn2.disabled = true;
         });
 
-        let tooltipTimeout = null;
-        inputNum.addEventListener('mouseenter', () => {
-            tooltip.style.opacity = '1';
-            tooltip.style.transform = 'translateY(0)';
-            if (tooltipTimeout) clearTimeout(tooltipTimeout);
-            tooltipTimeout = setTimeout(() => {
-                tooltip.style.opacity = '0';
-                tooltip.style.transform = 'translateY(-5px)';
-            }, 3000);
+        // При фокусе на поле ввода количества символов - очищаем
+        inputNum.addEventListener('focus', () => {
+            inputNum.placeholder = '';
+            inputNum.value = '';
+            inputNum.style.color = '#333';
+            inputNum.style.borderColor = '#4CAF50';
+            inputError.style.display = 'none';
         });
 
-        inputNum.addEventListener('mouseleave', () => {
-            if (tooltipTimeout) clearTimeout(tooltipTimeout);
-            tooltip.style.opacity = '0';
-            tooltip.style.transform = 'translateY(-5px)';
-        });
-
-        inputNum.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && textInput.value.trim() !== '') {
-                handleInputNumChange();
-            }
-        });
-
+        // При потере фокуса - если пустое, возвращаем placeholder визуально
         inputNum.addEventListener('blur', () => {
-            if (textInput.value.trim() !== '') {
-                handleInputNumChange();
+            if (inputNum.value.trim() === '') {
+                inputNum.value = '0';
+                inputNum.style.color = '#999';
+                inputNum.style.borderColor = '#ccc';
+            } else {
+            // Обрабатываем текст полностью при потере фокуса только если есть значение
+            processText(true);    }
+        });
+
+        // При нажатии Enter в поле ввода числа
+        inputNum.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                processText(true);
             }
         });
 
-        textInput.addEventListener('input', handleTextInput);
+        // При вводе в поле числа - скрываем ошибку
+        inputNum.addEventListener('input', () => {
+            inputError.style.display = 'none';
+            if (inputNum.value.trim() !== '') {
+                inputNum.style.color = '#333';
+                inputNum.style.borderColor = '#4CAF50';
+            } else {
+                inputNum.style.color = '#999';
+                inputNum.style.borderColor = '#ccc';
+            }
+        });
+
+        // При вводе текста - проверяем значение inputNum
+        textInput.addEventListener('input', () => {
+            const hasText = textInput.value.trim() !== '';
+            toggleBtn.disabled = !hasText;
+            clearBtn.disabled = !hasText;
+            toggleBtn2.disabled = !hasText;
+            updateCharCount();
+            
+            // Обрабатываем текст в зависимости от значения inputNum
+            if (hasText) {
+                processText(false);
+            } else {
+                textOutputTemp.value = '';
+                textOutputResult.innerHTML = '';
+                updateTextOutputTempBackground();
+                updateTextOutputResultHeight();
+            }
+        });
+
+        // При вводе в промежуточное поле - ничего не делаем
         textOutputTemp.addEventListener('input', () => {
             updateTextOutputTempBackground();
-            if (textInput.value.trim() !== '') {
-                handleInputNumChange();
-            }
         });
 
+        // Инициализация
         updateCharCount();
         updateTextOutputTempBackground();
         updateTextOutputResultHeight();
