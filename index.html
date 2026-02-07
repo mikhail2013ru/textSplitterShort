@@ -198,6 +198,20 @@
             cursor: not-allowed;
         }
 
+        .stats-info {
+            width: 1100px;
+            text-align: right;
+            margin-bottom: 8px;
+            color: #2E7D32;
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .stats-info .stats-number {
+            font-weight: 700;
+            color: #1B5E20;
+        }
+
         .section-title {
             width: 1100px;
             font-size: 18px;
@@ -374,6 +388,8 @@
         </div>
     </div>
 
+    <div class="stats-info" id="statsInfo">Текст разделён на: <span class="stats-number">0</span> символов и разбит на: <span class="stats-number">0</span> блоков</div>
+
     <div class="textOutputResult" id="textOutputResult"></div>
 
     <div id="notifications"></div>
@@ -389,6 +405,7 @@
         const toggleBtn2 = document.getElementById('toggleBtn2');
         const clearBtn = document.getElementById('clearBtn');
         const deleteOnCopyCheckbox = document.getElementById('deleteOnCopy');
+        const statsInfo = document.getElementById('statsInfo');
 
         let currentCopiedBlock = null;
         let isProcessing = false; // Флаг для предотвращения повторной обработки
@@ -603,6 +620,14 @@
             });
             if (currentBlock) blocks.push(cleanPunctuation(currentBlock));
 
+            // Обновляем статистику
+            const totalChars = text.replace(/\s+/g, '').length;
+            if (statsInfo) {
+                const statsNumbers = statsInfo.querySelectorAll('.stats-number');
+                if (statsNumbers[0]) statsNumbers[0].textContent = totalChars.toLocaleString();
+                if (statsNumbers[1]) statsNumbers[1].textContent = blocks.length;
+            }
+
             blocks.forEach((block, i) => {
                 const wrapper = document.createElement('div');
                 wrapper.className = 'block-wrapper';
@@ -746,6 +771,13 @@
             inputNum.value = '';
             inputError.style.display = 'none';
             
+            // Сбрасываем статистику
+            if (statsInfo) {
+                const statsNumbers = statsInfo.querySelectorAll('.stats-number');
+                if (statsNumbers[0]) statsNumbers[0].textContent = '0';
+                if (statsNumbers[1]) statsNumbers[1].textContent = '0';
+            }
+            
             updateCharCount();
             updateTextOutputTempBackground();
             updateTextOutputResultHeight();
@@ -802,6 +834,9 @@
             clearBtn.disabled = !hasText;
             toggleBtn2.disabled = !hasText;
             updateCharCount();
+            
+            // Удаляем класс 'copied' при изменении текста
+            textOutputTemp.classList.remove('copied');
             
             // Обрабатываем текст в зависимости от значения inputNum
             if (hasText) {
