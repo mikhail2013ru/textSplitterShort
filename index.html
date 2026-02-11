@@ -221,7 +221,6 @@
             padding-left: 4px;
         }
 
-        /* Чекбокс между заголовком и блоками, слева - улучшенное выравнивание */
         .checkbox-container {
             width: 1100px;
             margin: 8px 0 16px 4px;
@@ -297,6 +296,27 @@
             font-weight: bold;
         }
 
+        .block-length {
+            float: right;
+            font-size: 12px;
+            color: #666;
+            margin-left: 10px;
+        }
+
+        .block-wrapper.hidden {
+            display: none !important;
+        }
+
+        .block-wrapper.visible {
+            display: flex;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         #notifications {
             position: fixed;
             top: 20px;
@@ -348,7 +368,6 @@
         <div class="input-error" id="inputError">Необходимо ввести число или нажмите Enter</div>
     </div>
 
-    <!-- Верхняя секция -->
     <div class="section-width">
         <div class="textarea-container">
             <textarea id="textInput" class="textInput" placeholder="Введите текст здесь..."></textarea>
@@ -365,7 +384,6 @@
         </div>
     </div>
 
-    <!-- Обработанный текст без блоков -->
     <div class="section-title">Обработанный текст без разделения по блокам</div>
     <div class="section-width">
         <div class="textarea-container">
@@ -376,15 +394,12 @@
         </div>
     </div>
 
-    <!-- Обработанные предложения, с разделением по блокам -->
     <div class="section-with-checkbox">
-        <!-- Обработанные предложения, с разделением по блокам -->
         <div class="section-title">Обработанные предложения, с разделением по блокам</div>
         
-        <!-- Чекбокс ПЕРЕМЕЩЁН СЮДА: между заголовком и блоками, слева -->
         <div class="checkbox-container">
             <input type="checkbox" id="deleteOnCopy" />
-            <label for="deleteOnCopy">Удалять блок со скопированным текстом</label>
+            <label for="deleteOnCopy">Скрывать блок со скопированным текстом</label>
         </div>
     </div>
 
@@ -408,14 +423,13 @@
         const statsInfo = document.getElementById('statsInfo');
 
         let currentCopiedBlock = null;
-        let isProcessing = false; // Флаг для предотвращения повторной обработки
+        let isProcessing = false;
 
-        // ============ КОНСТАНТЫ И КОНФИГУРАЦИЯ ============
-        const OPTIMAL_CHUNK_SIZE = 600;
-        const MIN_CHUNK_SIZE = 50;
-        const MAX_CHUNK_SIZE = 800;
+        // ============ КОНСТАНТЫ ДЛЯ F5 TTS ============
+        const OPTIMAL_CHUNK_SIZE = 90;      // Оптимально для F5 TTS: 100-150 знаков
+        const MIN_CHUNK_SIZE = 40;
+        const MAX_CHUNK_SIZE = 100;           // Жесткое ограничение для F5 TTS
 
-        // Слова, на которых нельзя разрывать предложение
         const NO_BREAK_WORDS = new Set([
             'в', 'в+', 'на', 'н+а', 'при', 'пр+и', 'у', 'у+', 'за', 'з+а', 
             'над', 'н+ад', 'под', 'п+од', 'к', 'к+', 'по', 'п+о', 'с', 'с+',
@@ -428,20 +442,41 @@
             'мы', 'м+ы', 'вы', 'в+ы', 'они', 'он+и'
         ]);
 
+        // ============ ОБРАБОТЧИК ЧЕКБОКСА ============
+        deleteOnCopyCheckbox.addEventListener('change', function() {
+            const allBlocks = document.querySelectorAll('.block-wrapper');
+            
+            if (!this.checked) {
+                allBlocks.forEach(block => {
+                    if (block.classList.contains('hidden')) {
+                        block.classList.remove('hidden');
+                        block.classList.add('visible');
+                    }
+                });
+                
+                const copiedBlocks = document.querySelectorAll('.block-wrapper.visible .OuterText.copied');
+                
+                if (copiedBlocks.length > 0) {
+                    for (let i = 0; i < copiedBlocks.length - 1; i++) {
+                        copiedBlocks[i].classList.remove('copied');
+                    }
+                    currentCopiedBlock = copiedBlocks[copiedBlocks.length - 1];
+                } else {
+                    currentCopiedBlock = null;
+                }
+            }
+            
+            updateStats();
+            renumberVisibleBlocks();
+            updateTextOutputResultHeight();
+        });
+
         // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
         const updateTextOutputTempBackground = () => {
             if (textOutputTemp.value.trim() === '') {
                 textOutputTemp.classList.add('empty');
             } else {
                 textOutputTemp.classList.remove('empty');
-            }
-        };
-
-        const updateTextOutputResultHeight = () => {
-            if (textOutputResult.children.length > 0) {
-                textOutputResult.classList.add('has-content');
-            } else {
-                textOutputResult.classList.remove('has-content');
             }
         };
 
@@ -465,7 +500,7 @@
             notifications.appendChild(notif);
         };
 
-        // ============ ИСПРАВЛЕННАЯ ПУНКТУАЦИЯ ============
+        // ============ ОЧИСТКА ПУНКТУАЦИИ (СОХРАНЯЕТ +) ============
         const cleanPunctuation = (text) => {
             if (!text || !text.trim()) return text;
             
@@ -476,16 +511,7 @@
                 .replace(/,\s*\.(?!\d)/g, '.')
                 .replace(/\.\s*\./g, '.')
                 .replace(/\.\.$/g, '.')
-                .replace(/([а-яё]+)\.([а-яё]+)\.([а-яё]+)/gi, (match, p1, p2, p3) => {
-                    const combined = p1 + p2 + p3;
-                    const wordLength = combined.length;
-                    return wordLength >= 3 && wordLength <= 15 ? combined : match;
-                })
-                .replace(/([а-яё]+)\.([а-яё]+)/gi, (match, p1, p2) => {
-                    const combined = p1 + p2;
-                    const wordLength = combined.length;
-                    return wordLength >= 3 && wordLength <= 15 ? combined : match;
-                })
+                // СОХРАНЯЕМ символы +, НЕ удаляем точки в словах с ударениями
                 .replace(/,\s*\.(?!\s)/g, ',')
                 .replace(/потому\s*,\s*что/gi, 'потому что')
                 .replace(/([а-яё]+),\.\s*\.—/gi, '$1, —')
@@ -526,6 +552,7 @@
             for (let i = 0; i < chunks.length; i++) {
                 let chunk = chunks[i];
                 chunk = cleanPunctuation(chunk);
+                
                 if (chunk.length < MIN_CHUNK_SIZE && i < chunks.length - 1) {
                     const nextChunk = chunks[i + 1];
                     const combined = chunk.replace(/[.!?…]$/, '') + ' ' + nextChunk;
@@ -535,6 +562,7 @@
                         continue;
                     }
                 }
+                
                 if (!/[.!?…]$/.test(chunk) && chunk.length > 10) {
                     const lastChar = chunk.slice(-1);
                     if (/[а-яёa-z0-9]/i.test(lastChar)) {
@@ -546,27 +574,34 @@
             return result;
         };
 
-        const splitTextWithPunctuation = (text, chunkSize = 600) => {
+        // ============ РАЗБИВКА ТЕКСТА (УЧИТЫВАЕТ + В ДЛИНЕ) ============
+        const splitTextWithPunctuation = (text, chunkSize = 90) => {
             const chunks = [];
             text = cleanPunctuation(text);
+            
             const sentenceRegex = /[^.!?…]*[.!?…]+(?=\s|$)/g;
             const sentences = text.match(sentenceRegex) || [text];
             
             sentences.forEach(sentence => {
                 sentence = sentence.trim();
                 if (!sentence) return;
+                
                 if (sentence.length <= chunkSize) {
                     chunks.push(sentence);
                     return;
                 }
+                
                 const words = sentence.split(/\s+/);
                 let currentChunk = [];
                 let currentText = '';
+                
                 for (let i = 0; i < words.length; i++) {
                     const word = words[i];
                     const testText = currentText ? `${currentText} ${word}` : word;
+                    
                     if (testText.length > chunkSize * 0.8) {
                         let breakPosition = -1;
+                        
                         for (let j = currentChunk.length - 1; j >= 0; j--) {
                             const chunkWord = currentChunk[j];
                             if (chunkWord.match(/[,;:—.!?…]$/)) {
@@ -574,6 +609,7 @@
                                 break;
                             }
                         }
+                        
                         if (breakPosition === -1) {
                             for (let j = currentChunk.length - 1; j >= 0; j--) {
                                 const chunkWord = currentChunk[j].replace(/[,.!?;:—]/g, '').toLowerCase();
@@ -583,6 +619,7 @@
                                 }
                             }
                         }
+                        
                         if (breakPosition > 0 && breakPosition < currentChunk.length) {
                             const chunkText = currentChunk.slice(0, breakPosition + 1).join(' ');
                             chunks.push(chunkText);
@@ -590,9 +627,11 @@
                             currentText = currentChunk.join(' ');
                         }
                     }
+                    
                     currentChunk.push(word);
                     currentText = currentChunk.join(' ');
                 }
+                
                 if (currentText.length >= MIN_CHUNK_SIZE) {
                     chunks.push(currentText);
                 } else if (currentText.length > 0 && chunks.length > 0) {
@@ -601,76 +640,178 @@
                     chunks.push(combined);
                 }
             });
+            
             return postProcessChunks(chunks);
         };
 
+        // ============ РАЗБИВКА НА БЛОКИ (УЧИТЫВАЕТ + В ДЛИНЕ) ============
         const splitIntoBlocks = (text, maxSize) => {
             textOutputResult.innerHTML = '';
+            
+            if (!text || maxSize <= 0) {
+                updateStats(0, 0);
+                return;
+            }
+
             const chunks = splitTextWithPunctuation(text, maxSize);
             const blocks = [];
             let currentBlock = '';
-            chunks.forEach(chunk => {
+
+            for (const chunk of chunks) {
+                if (chunk.length > maxSize) {
+                    if (currentBlock) {
+                        blocks.push(cleanPunctuation(currentBlock));
+                        currentBlock = '';
+                    }
+                    
+                    for (let i = 0; i < chunk.length; i += maxSize) {
+                        const subChunk = chunk.slice(i, i + maxSize);
+                        blocks.push(cleanPunctuation(subChunk));
+                    }
+                    continue;
+                }
+
                 const testBlock = currentBlock ? `${currentBlock} ${chunk}` : chunk;
+                
                 if (testBlock.length <= maxSize) {
                     currentBlock = testBlock;
                 } else {
-                    if (currentBlock) blocks.push(cleanPunctuation(currentBlock));
+                    if (currentBlock) {
+                        blocks.push(cleanPunctuation(currentBlock));
+                    }
                     currentBlock = chunk;
                 }
-            });
-            if (currentBlock) blocks.push(cleanPunctuation(currentBlock));
-
-            // Обновляем статистику
-            const totalChars = text.replace(/\s+/g, '').length;
-            if (statsInfo) {
-                const statsNumbers = statsInfo.querySelectorAll('.stats-number');
-                if (statsNumbers[0]) statsNumbers[0].textContent = totalChars.toLocaleString();
-                if (statsNumbers[1]) statsNumbers[1].textContent = blocks.length;
             }
 
-            blocks.forEach((block, i) => {
-                const wrapper = document.createElement('div');
-                wrapper.className = 'block-wrapper';
+            if (currentBlock) {
+                blocks.push(cleanPunctuation(currentBlock));
+            }
 
-                const countDiv = document.createElement('div');
-                countDiv.className = 'Count';
-                countDiv.textContent = i + 1;
-
-                const blockDiv = document.createElement('div');
-                blockDiv.className = 'OuterText';
-                blockDiv.textContent = block;
-
-                const lengthSpan = document.createElement('span');
-                lengthSpan.style.cssText = 'float: right; font-size: 12px; color: #666; margin-left: 10px;';
-                lengthSpan.textContent = `${block.length} симв.`;
-                blockDiv.appendChild(lengthSpan);
-
-                blockDiv.addEventListener('click', function () {
-                    if (deleteOnCopyCheckbox.checked && currentCopiedBlock && currentCopiedBlock !== this) {
-                        const parent = currentCopiedBlock.closest('.block-wrapper');
-                        if (parent) parent.remove();
-                        currentCopiedBlock = null;
-                    }
-
-                    if (this.classList.contains('copied')) {
-                        this.classList.remove('copied');
-                        if (currentCopiedBlock === this) currentCopiedBlock = null;
-                    } else {
-                        this.classList.add('copied');
-                        currentCopiedBlock = this;
-                        const textToCopy = this.textContent.replace(/\s*\d+ симв\.\s*$/, '').trim();
-                        navigator.clipboard.writeText(textToCopy);
-                        showNotification("Текст скопирован в буфер обмена");
-                    }
-
-                    updateTextOutputResultHeight();
-                });
-
-                wrapper.appendChild(countDiv);
-                wrapper.appendChild(blockDiv);
-                textOutputResult.appendChild(wrapper);
+            blocks.forEach((block, index) => {
+                createBlockElement(block, index + 1);
             });
 
+            renumberVisibleBlocks();
+            updateStats();
+            updateTextOutputResultHeight();
+        };
+
+        // ============ ФУНКЦИИ СТАТИСТИКИ ============
+        const updateStats = (totalChars = null, blockCount = null) => {
+            if (!statsInfo) return;
+            
+            const statsNumbers = statsInfo.querySelectorAll('.stats-number');
+            
+            if (totalChars === null) {
+                totalChars = textInput.value.replace(/\s+/g, '').length;
+            }
+            
+            if (statsNumbers[0]) {
+                statsNumbers[0].textContent = totalChars.toLocaleString();
+            }
+            
+            if (blockCount === null) {
+                const visibleBlocks = document.querySelectorAll('.block-wrapper.visible');
+                blockCount = visibleBlocks.length;
+            }
+            
+            if (statsNumbers[1]) {
+                statsNumbers[1].textContent = blockCount;
+            }
+        };
+
+        const renumberVisibleBlocks = () => {
+            const visibleBlocks = document.querySelectorAll('.block-wrapper.visible');
+            visibleBlocks.forEach((block, index) => {
+                const countDiv = block.querySelector('.Count');
+                if (countDiv) {
+                    countDiv.textContent = index + 1;
+                }
+            });
+        };
+
+        const updateTextOutputResultHeight = () => {
+            const visibleBlocks = document.querySelectorAll('.block-wrapper.visible');
+            if (visibleBlocks.length > 0) {
+                textOutputResult.classList.add('has-content');
+            } else {
+                textOutputResult.classList.remove('has-content');
+            }
+        };
+
+        // ============ СОЗДАНИЕ ЭЛЕМЕНТОВ БЛОКОВ ============
+        const createBlockElement = (blockContent, originalIndex) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'block-wrapper visible';
+            wrapper.dataset.originalIndex = originalIndex;
+
+            const countDiv = document.createElement('div');
+            countDiv.className = 'Count';
+            countDiv.textContent = originalIndex;
+
+            const blockDiv = document.createElement('div');
+            blockDiv.className = 'OuterText';
+            blockDiv.dataset.blockIndex = originalIndex;
+            
+            const textNode = document.createTextNode(blockContent);
+            blockDiv.appendChild(textNode);
+
+            const lengthSpan = document.createElement('span');
+            lengthSpan.className = 'block-length';
+            lengthSpan.textContent = `${blockContent.length} симв.`;
+            blockDiv.appendChild(lengthSpan);
+
+            blockDiv.addEventListener('click', handleBlockClick);
+
+            wrapper.appendChild(countDiv);
+            wrapper.appendChild(blockDiv);
+            textOutputResult.appendChild(wrapper);
+        };
+
+        // ============ ОБРАБОТЧИК КЛИКА ПО БЛОКУ ============
+        const handleBlockClick = (event) => {
+            const clickedBlock = event.currentTarget;
+            const isDeleteMode = deleteOnCopyCheckbox.checked;
+            
+            const wrapper = clickedBlock.closest('.block-wrapper');
+            if (!wrapper.classList.contains('visible')) {
+                return;
+            }
+            
+            if (isDeleteMode) {
+                if (currentCopiedBlock && currentCopiedBlock !== clickedBlock) {
+                    const previousWrapper = currentCopiedBlock.closest('.block-wrapper');
+                    if (previousWrapper) {
+                        previousWrapper.classList.remove('visible');
+                        previousWrapper.classList.add('hidden');
+                        currentCopiedBlock.classList.remove('copied');
+                        currentCopiedBlock = null;
+                    }
+                }
+            } else {
+                const visibleCopiedBlocks = document.querySelectorAll('.block-wrapper.visible .OuterText.copied');
+                visibleCopiedBlocks.forEach(block => {
+                    if (block !== clickedBlock) {
+                        block.classList.remove('copied');
+                    }
+                });
+            }
+
+            if (clickedBlock.classList.contains('copied')) {
+                clickedBlock.classList.remove('copied');
+                currentCopiedBlock = null;
+            } else {
+                clickedBlock.classList.add('copied');
+                currentCopiedBlock = clickedBlock;
+                
+                const textContent = clickedBlock.childNodes[0].textContent.trim();
+                navigator.clipboard.writeText(textContent)
+                    .then(() => showNotification("Текст скопирован в буфер обмена"))
+                    .catch(err => console.error('Ошибка копирования:', err));
+            }
+
+            renumberVisibleBlocks();
+            updateStats();
             updateTextOutputResultHeight();
         };
 
@@ -682,7 +823,6 @@
             const text = textInput.value.trim();
             const numValue = inputNum.value.trim();
 
-            // Очищаем предыдущие результаты
             textOutputTemp.value = '';
             textOutputResult.innerHTML = '';
             updateTextOutputTempBackground();
@@ -693,9 +833,7 @@
                 return;
             }
 
-            // Если forceFullProcess = false (при вводе текста), проверяем значение
             if (!forceFullProcess) {
-                // Если введено "0" или пустое значение - только промежуточный результат
                 if (!numValue || numValue === '0') {
                     const chunks = splitTextWithPunctuation(text, OPTIMAL_CHUNK_SIZE);
                     const numberedChunks = chunks.map((chunk, i) => `${i + 1}. ${chunk}`);
@@ -706,7 +844,6 @@
                 }
             }
 
-            // Проверяем валидность числа
             if (!numValue || isNaN(numValue) || parseInt(numValue) <= 0) {
                 inputError.style.display = 'block';
                 isProcessing = false;
@@ -717,7 +854,6 @@
 
             const num = parseInt(numValue);
 
-            // Разделяем текст на блоки и заполняем оба поля
             const chunks = splitTextWithPunctuation(text, num);
             const numberedChunks = chunks.map((chunk, i) => `${i + 1}. ${chunk}`);
             textOutputTemp.value = numberedChunks.join('\n\n');
@@ -729,13 +865,11 @@
         };
 
         // ============ ОБРАБОТЧИКИ СОБЫТИЙ ============
-        // 🔥 КЛИК ПО textOutputTemp: КОПИРОВАТЬ БЕЗ НУМЕРАЦИИ
         textOutputTemp.addEventListener('click', function () {
             if (!this.value.trim()) return;
             if (this.classList.contains('copied')) {
                 this.classList.remove('copied');
             } else {
-                // Удаляем нумерацию: "1. Текст" → "Текст"
                 const textWithoutNumbers = this.value.replace(/^\d+\.\s*/gm, '');
                 navigator.clipboard.writeText(textWithoutNumbers);
                 this.classList.add('copied');
@@ -771,13 +905,9 @@
             inputNum.value = '';
             inputError.style.display = 'none';
             
-            // Сбрасываем статистику
-            if (statsInfo) {
-                const statsNumbers = statsInfo.querySelectorAll('.stats-number');
-                if (statsNumbers[0]) statsNumbers[0].textContent = '0';
-                if (statsNumbers[1]) statsNumbers[1].textContent = '0';
-            }
-            
+            currentCopiedBlock = null;
+
+            updateStats(0, 0);            
             updateCharCount();
             updateTextOutputTempBackground();
             updateTextOutputResultHeight();
@@ -787,7 +917,6 @@
             toggleBtn2.disabled = true;
         });
 
-        // При фокусе на поле ввода количества символов - очищаем
         inputNum.addEventListener('focus', () => {
             inputNum.placeholder = '';
             inputNum.value = '';
@@ -796,18 +925,16 @@
             inputError.style.display = 'none';
         });
 
-        // При потере фокуса - если пустое, возвращаем placeholder визуально
         inputNum.addEventListener('blur', () => {
             if (inputNum.value.trim() === '') {
                 inputNum.value = '0';
                 inputNum.style.color = '#999';
                 inputNum.style.borderColor = '#ccc';
             } else {
-            // Обрабатываем текст полностью при потере фокуса только если есть значение
-            processText(true);    }
+                processText(true);
+            }
         });
 
-        // При нажатии Enter в поле ввода числа
         inputNum.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -815,7 +942,6 @@
             }
         });
 
-        // При вводе в поле числа - скрываем ошибку
         inputNum.addEventListener('input', () => {
             inputError.style.display = 'none';
             if (inputNum.value.trim() !== '') {
@@ -827,7 +953,6 @@
             }
         });
 
-        // При вводе текста - проверяем значение inputNum
         textInput.addEventListener('input', () => {
             const hasText = textInput.value.trim() !== '';
             toggleBtn.disabled = !hasText;
@@ -835,10 +960,8 @@
             toggleBtn2.disabled = !hasText;
             updateCharCount();
             
-            // Удаляем класс 'copied' при изменении текста
             textOutputTemp.classList.remove('copied');
             
-            // Обрабатываем текст в зависимости от значения inputNum
             if (hasText) {
                 processText(false);
             } else {
@@ -849,12 +972,11 @@
             }
         });
 
-        // При вводе в промежуточное поле - ничего не делаем
         textOutputTemp.addEventListener('input', () => {
             updateTextOutputTempBackground();
         });
 
-        // Инициализация
+        // ============ ИНИЦИАЛИЗАЦИЯ ============
         updateCharCount();
         updateTextOutputTempBackground();
         updateTextOutputResultHeight();
