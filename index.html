@@ -79,10 +79,16 @@
             width: 1100px;
             display: flex;
             gap: 16px;
+            align-items: flex-start;
+        }
+
+        .textarea-wrapper {
+            flex: 1;
+            position: relative;
         }
 
         .textarea-container {
-            flex: 1;
+            width: 100%;
             position: relative;
         }
 
@@ -90,27 +96,24 @@
             width: 100%;
             min-height: 250px;
             padding: 14px;
+            padding-right: 28px; /* 14px + 8px запас под скролл */
             font-size: 15px;
             border: 2px solid #ccc;
             border-radius: 10px;
-            resize: vertical;
             background: white;
             transition: box-shadow 0.3s ease, border-color 0.3s ease, background-color 0.2s ease;
-            overflow-y: auto;
-        }
-
-        #textOutputTemp.empty {
-            background-color: white;
-        }
-        #textOutputTemp:not(.empty) {
-            background-color: #fafafa;
-            text-align: justify;
-            text-justify: inter-word;
+            overflow-y: scroll !important;
+            resize: none;
+            position: relative;
+            z-index: 2;
+            scrollbar-width: thin; /* Для Firefox */
+            scrollbar-color: transparent transparent;
         }
 
         textarea:hover {
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             border-color: #4CAF50;
+            scrollbar-color: #c1c1c1 #f1f1f1; /* Становится видимым при наведении */
         }
 
         textarea:focus-visible {
@@ -119,13 +122,132 @@
             box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
         }
 
-        textarea.copied {
-            color: red !important;
+        textarea.scroll-visible {
+            /* padding-right: 22px; Оставляем такой же padding */
+            overflow-y: auto !important;
+        }
+
+        /* Уменьшаем ширину скролла для более аккуратного вида */
+        textarea.scroll-visible::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        textarea.scroll-visible::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        textarea.scroll-visible::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 3px;
+        }
+
+        textarea.scroll-visible::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        textarea.expanded::-webkit-scrollbar-thumb {
+            background: #c1c1c1 !important;
+        }
+
+        textarea.expanded::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8 !important;
+        }
+
+        textarea.expanded {
+            overflow-y: auto !important; /* Гарантируем появление скроллбара */
+        }
+
+        .text-output-container.copied {
+            background-color: #e8f5e9;
+            border-color: #4CAF50;
+        }
+
+        .text-output-block.copied {
+            background-color: #e8f5e9;
+        }
+
+        .text-output-container {
+            flex: 1;
+            position: relative;
+            background: white;
+            border-radius: 10px;
+            border: 2px solid #ccc;
+            transition: all 0.3s ease;
+            min-height: 250px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .text-output-container:hover {
+            border-color: #4CAF50;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+        }
+
+        .text-output-block {
+            display: flex;
+            flex-direction: column;
+            padding: 14px;
+            gap: 12px;
+        }
+
+        .sentence-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .sentence-item:hover {
+            background-color: #f0f9f1;
+        }
+
+        .sentence-number {
+            font-weight: 700;
+            color: #2E7D32;
+            font-size: 24px;
+            min-width: 45px;
+            text-align: right;
+            padding-right: 8px;
+            border-right: 2px solid #4CAF50;
+            line-height: 1.5;
+            user-select: none;
+        }
+
+        .sentence-text {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333;
+            flex: 1;
+            word-wrap: break-word;
+        }
+
+        .sentence-item.copied {
+            background-color: #e8f5e9;
+        }
+
+        .sentence-item.copied .sentence-text {
+            color: #2E7D32;
+            font-weight: 500;
+        }
+
+        .char-counter-container-wrap {
+            width: 220px;
+            min-width: 220px;
+            position: relative;
+            align-self: flex-start;
+        }
+
+        .char-counter-container-wrap.sticky {
+            position: sticky;
+            top: 20px;
         }
 
         .char-counter-container {
-            width: 220px;
-            min-width: 220px;
+            width: 100%;
             padding: 20px;
             border-radius: 12px;
             background: white;
@@ -134,6 +256,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
+            margin-bottom: 12px;
         }
 
         .char-counter-label {
@@ -152,12 +275,10 @@
         }
 
         .toggle-buttons {
+            width: 100%;
             display: flex;
             flex-direction: column;
             gap: 6px;
-            margin-top: 12px;
-            width: 220px;
-            min-width: 220px;
         }
 
         .toggle-btn, .clear-btn {
@@ -359,6 +480,10 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #a8a8a8;
         }
+
+        .toggle-btn-hidden {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -369,10 +494,12 @@
     </div>
 
     <div class="section-width">
-        <div class="textarea-container">
-            <textarea id="textInput" class="textInput" placeholder="Введите текст здесь..."></textarea>
+        <div class="textarea-wrapper">
+            <div class="textarea-container">
+                <textarea id="textInput" class="textInput" placeholder="Введите текст здесь..."></textarea>
+            </div>
         </div>
-        <div>
+        <div class="char-counter-container-wrap" id="sidePanelWrap">
             <div class="char-counter-container">
                 <div class="char-counter-label">Символов в тексте</div>
                 <div class="char-counter-value" id="charCount">0</div>
@@ -386,11 +513,13 @@
 
     <div class="section-title">Обработанный текст без разделения по блокам</div>
     <div class="section-width">
-        <div class="textarea-container">
-            <textarea id="textOutputTemp" class="textOutputTemp empty" placeholder="Промежуточный результат..."></textarea>
+        <div class="text-output-container">
+            <div id="textOutputTemp" class="text-output-block"></div>
         </div>
-        <div class="toggle-buttons">
-            <button class="toggle-btn" id="toggleBtn2" disabled>Развернуть</button>
+        <div class="char-counter-container-wrap">
+            <div class="toggle-buttons">
+                <button class="toggle-btn toggle-btn-hidden" id="toggleBtn2" disabled style="display: none;">Развернуть</button>
+            </div>
         </div>
     </div>
 
@@ -421,14 +550,18 @@
         const clearBtn = document.getElementById('clearBtn');
         const deleteOnCopyCheckbox = document.getElementById('deleteOnCopy');
         const statsInfo = document.getElementById('statsInfo');
+        const sidePanelWrap = document.getElementById('sidePanelWrap');
 
         let currentCopiedBlock = null;
         let isProcessing = false;
+        // let scrollTimeout = null;
+        let isTextareaExpanded = false;
+        // let isHoveringScrollbar = false;
 
         // ============ КОНСТАНТЫ ДЛЯ F5 TTS ============
-        const OPTIMAL_CHUNK_SIZE = 90;      // Оптимально для F5 TTS: 100-150 знаков
+        const OPTIMAL_CHUNK_SIZE = 85;
         const MIN_CHUNK_SIZE = 40;
-        const MAX_CHUNK_SIZE = 100;           // Жесткое ограничение для F5 TTS
+        const MAX_CHUNK_SIZE = 90;
 
         const NO_BREAK_WORDS = new Set([
             'в', 'в+', 'на', 'н+а', 'при', 'пр+и', 'у', 'у+', 'за', 'з+а', 
@@ -472,14 +605,6 @@
         });
 
         // ============ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ============
-        const updateTextOutputTempBackground = () => {
-            if (textOutputTemp.value.trim() === '') {
-                textOutputTemp.classList.add('empty');
-            } else {
-                textOutputTemp.classList.remove('empty');
-            }
-        };
-
         const updateCharCount = () => {
             const count = textInput.value.length;
             charCountElement.textContent = count.toLocaleString();
@@ -500,7 +625,7 @@
             notifications.appendChild(notif);
         };
 
-        // ============ ОЧИСТКА ПУНКТУАЦИИ (СОХРАНЯЕТ +) ============
+        // ============ ОЧИСТКА ПУНКТУАЦИИ ============
         const cleanPunctuation = (text) => {
             if (!text || !text.trim()) return text;
             
@@ -511,7 +636,6 @@
                 .replace(/,\s*\.(?!\d)/g, '.')
                 .replace(/\.\s*\./g, '.')
                 .replace(/\.\.$/g, '.')
-                // СОХРАНЯЕМ символы +, НЕ удаляем точки в словах с ударениями
                 .replace(/,\s*\.(?!\s)/g, ',')
                 .replace(/потому\s*,\s*что/gi, 'потому что')
                 .replace(/([а-яё]+),\.\s*\.—/gi, '$1, —')
@@ -574,7 +698,7 @@
             return result;
         };
 
-        // ============ РАЗБИВКА ТЕКСТА (УЧИТЫВАЕТ + В ДЛИНЕ) ============
+        // ============ РАЗБИВКА ТЕКСТА ============
         const splitTextWithPunctuation = (text, chunkSize = 90) => {
             const chunks = [];
             text = cleanPunctuation(text);
@@ -644,7 +768,7 @@
             return postProcessChunks(chunks);
         };
 
-        // ============ РАЗБИВКА НА БЛОКИ (УЧИТЫВАЕТ + В ДЛИНЕ) ============
+        // ============ РАЗБИВКА НА БЛОКИ ============
         const splitIntoBlocks = (text, maxSize) => {
             textOutputResult.innerHTML = '';
             
@@ -823,9 +947,8 @@
             const text = textInput.value.trim();
             const numValue = inputNum.value.trim();
 
-            textOutputTemp.value = '';
+            textOutputTemp.innerHTML = '';
             textOutputResult.innerHTML = '';
-            updateTextOutputTempBackground();
             updateTextOutputResultHeight();
 
             if (!text) {
@@ -836,9 +959,25 @@
             if (!forceFullProcess) {
                 if (!numValue || numValue === '0') {
                     const chunks = splitTextWithPunctuation(text, OPTIMAL_CHUNK_SIZE);
-                    const numberedChunks = chunks.map((chunk, i) => `${i + 1}. ${chunk}`);
-                    textOutputTemp.value = numberedChunks.join('\n\n');
-                    updateTextOutputTempBackground();
+                    
+                    chunks.forEach((chunk, index) => {
+                        const sentenceItem = document.createElement('div');
+                        sentenceItem.className = 'sentence-item';
+                        sentenceItem.dataset.index = index;
+                        
+                        const numberDiv = document.createElement('div');
+                        numberDiv.className = 'sentence-number';
+                        numberDiv.textContent = index + 1;
+                        
+                        const textDiv = document.createElement('div');
+                        textDiv.className = 'sentence-text';
+                        textDiv.textContent = chunk;
+                        
+                        sentenceItem.appendChild(numberDiv);
+                        sentenceItem.appendChild(textDiv);
+                        textOutputTemp.appendChild(sentenceItem);
+                    });
+                    
                     isProcessing = false;
                     return;
                 }
@@ -853,68 +992,273 @@
             inputError.style.display = 'none';
 
             const num = parseInt(numValue);
-
             const chunks = splitTextWithPunctuation(text, num);
-            const numberedChunks = chunks.map((chunk, i) => `${i + 1}. ${chunk}`);
-            textOutputTemp.value = numberedChunks.join('\n\n');
-            updateTextOutputTempBackground();
+            
+            chunks.forEach((chunk, index) => {
+                const sentenceItem = document.createElement('div');
+                sentenceItem.className = 'sentence-item';
+                sentenceItem.dataset.index = index;
+                
+                const numberDiv = document.createElement('div');
+                numberDiv.className = 'sentence-number';
+                numberDiv.textContent = index + 1;
+                
+                const textDiv = document.createElement('div');
+                textDiv.className = 'sentence-text';
+                textDiv.textContent = chunk;
+                
+                sentenceItem.appendChild(numberDiv);
+                sentenceItem.appendChild(textDiv);
+                textOutputTemp.appendChild(sentenceItem);
+            });
 
             splitIntoBlocks(text, num);
-
             isProcessing = false;
         };
 
-        // ============ ОБРАБОТЧИКИ СОБЫТИЙ ============
-        textOutputTemp.addEventListener('click', function () {
-            if (!this.value.trim()) return;
-            if (this.classList.contains('copied')) {
-                this.classList.remove('copied');
+        // ============ ФУНКЦИЯ АДАПТИВНОЙ ВЫСОТЫ ============
+        const setAdaptiveHeight = (textarea) => {
+            textarea.style.height = 'auto';
+            const scrollHeight = textarea.scrollHeight;
+            const textareaRect = textarea.getBoundingClientRect();
+            const windowHeight = window.innerHeight;
+            const offsetFromTop = textareaRect.top;
+            
+            // Ключевое изменение: рассчитываем максимальную высоту с учётом позиции поля на экране
+            const availableSpaceBelow = windowHeight - offsetFromTop - 120; // 120px = отступ под полем (панель + кнопки + запас)
+            const maxHeight = Math.min(500, availableSpaceBelow); // Ограничиваем до 500px для компактности
+            
+            if (scrollHeight <= 250) {
+                textarea.style.height = '250px';
+                textarea.dataset.hasScroll = 'false';
+                textarea.classList.remove('scroll-visible');
+            } else if (scrollHeight <= maxHeight) {
+                textarea.style.height = `${scrollHeight}px`;
+                textarea.dataset.hasScroll = 'false';
+                textarea.classList.remove('scroll-visible');
             } else {
-                const textWithoutNumbers = this.value.replace(/^\d+\.\s*/gm, '');
-                navigator.clipboard.writeText(textWithoutNumbers);
-                this.classList.add('copied');
-                showNotification("Текст (без номеров) скопирован в буфер обмена");
+                textarea.style.height = `${maxHeight}px`;
+                textarea.classList.add('scroll-visible');
+                textarea.dataset.hasScroll = 'true';
+            }
+        };
+
+        // ============ ОБРАБОТЧИК НАВЕДЕНИЯ НА СКРОЛЛ ============
+        
+
+        // ============ ОБРАБОТЧИК STICKY-ПАНЕЛИ ============
+        const handleSidePanelSticky = () => {
+            if (!isTextareaExpanded || !sidePanelWrap) {
+                sidePanelWrap?.classList.remove('sticky');
+                return;
+            }
+            
+            const textarea = document.getElementById('textInput');
+            const textareaRect = textarea.getBoundingClientRect();
+            
+            if (textareaRect.top <= 20) {
+                sidePanelWrap.classList.add('sticky');
+            } else {
+                sidePanelWrap.classList.remove('sticky');
+            }
+        };
+
+        // ============ ОБРАБОТЧИКИ СОБЫТИЙ ============
+        textOutputTemp.addEventListener('click', function(e) {
+            const allTextBlocks = document.querySelectorAll('.sentence-text');
+            if (allTextBlocks.length === 0) return;
+            
+            const fullText = Array.from(allTextBlocks)
+                .map(div => div.textContent.trim())
+                .join(' ');
+            
+            const sentenceItem = e.target.closest('.sentence-item');
+            
+            if (sentenceItem) {
+                document.querySelectorAll('.sentence-item.copied').forEach(item => {
+                    item.classList.remove('copied');
+                });
+                sentenceItem.classList.add('copied');
+                textOutputTemp.classList.remove('copied');
+            } else {
+                document.querySelectorAll('.sentence-item.copied').forEach(item => {
+                    item.classList.remove('copied');
+                });
+                textOutputTemp.classList.add('copied');
+            }
+            
+            navigator.clipboard.writeText(fullText)
+                .then(() => showNotification("Весь текст скопирован в буфер обмена"))
+                .catch(err => console.error('Ошибка копирования:', err));
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!textOutputTemp.contains(e.target)) {
+                textOutputTemp.classList.remove('copied');
+                document.querySelectorAll('.sentence-item.copied').forEach(item => {
+                    item.classList.remove('copied');
+                });
             }
         });
 
+        // ============ НАСТРОЙКА КНОПОК РАЗВОРАЧИВАНИЯ ============
         const setupToggle = (btn, targetId) => {
-            let isExpanded = false;
+            if (!btn) return;            
             btn.addEventListener('click', () => {
                 const textarea = document.getElementById(targetId);
-                if (isExpanded) {
-                    textarea.style.height = '250px';
+                
+                if (targetId === 'textInput') {
+                    isTextareaExpanded = !isTextareaExpanded;
+                }
+                
+                if (!isTextareaExpanded) {
+                    // Сворачиваем: возвращаем адаптивную высоту и внутренний скроллбар
+                    setAdaptiveHeight(textarea);
+                    textarea.classList.remove('expanded');
+                    textarea.style.overflowY = 'scroll'; // Включаем внутренний скроллбар
                     btn.textContent = 'Развернуть';
+                    sidePanelWrap?.classList.remove('sticky');
                 } else {
                     textarea.style.height = 'auto';
+                    const windowHeight = window.innerHeight;
+                    // Ограничиваем высоту 80% от окна браузера с минимальным отступом 40px снизу
+                    const maxHeight = windowHeight * 0.8;
                     const scrollHeight = textarea.scrollHeight;
-                    const maxHeight = Math.min(scrollHeight, window.innerHeight * 0.95);
-                    textarea.style.height = `${maxHeight}px`;
+                    
+                    // Устанавливаем высоту: либо по контенту, либо максимум 80% окна
+                    textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+                    textarea.style.overflowY = 'auto'; // ← Включаем внутренний скроллбар
+                    textarea.classList.add('expanded');
                     btn.textContent = 'Скрыть';
+                    
+                    setTimeout(() => {
+                        handleSidePanelSticky();
+                    }, 10);
                 }
-                isExpanded = !isExpanded;
             });
         };
 
+        // ============ ОБРАБОТЧИКИ СОБЫТИЙ ============
+        window.addEventListener('resize', () => {
+            const textarea = document.getElementById('textInput');
+            if (toggleBtn.textContent === 'Развернуть') {
+                // Свернутый режим: адаптивная высота + внутренний скроллбар
+                setAdaptiveHeight(textarea);
+                textarea.classList.remove('expanded');
+                textarea.style.overflowY = 'scroll';
+            } else if (isTextareaExpanded) {
+                textarea.style.height = 'auto';
+                const windowHeight = window.innerHeight;
+                const maxHeight = windowHeight * 0.8;
+                const scrollHeight = textarea.scrollHeight;
+                textarea.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+                textarea.style.overflowY = 'auto'; // ← Включаем внутренний скроллбар
+                textarea.classList.add('expanded');
+            }
+        });
+
+        window.addEventListener('scroll', () => {
+            handleSidePanelSticky();
+        }, { passive: true });
+
+        textInput.addEventListener('input', function() {
+            const hasText = this.value.trim() !== '';
+            toggleBtn.disabled = !hasText;
+            clearBtn.disabled = !hasText;
+            toggleBtn2.disabled = !hasText;
+            updateCharCount();
+            
+            if (toggleBtn.textContent === 'Развернуть') {
+                setAdaptiveHeight(this);
+            } else if (isTextareaExpanded) {
+                // При вводе текста в развернутом состоянии пересчитываем высоту
+                // const windowHeight = window.innerHeight;
+                // const textareaRect = this.getBoundingClientRect();
+
+                // const offsetFromTop = textareaRect.top;
+                // const availableHeight = windowHeight - offsetFromTop - 20;
+                // this.style.height = `${Math.max(300, availableHeight)}px`;
+                // this.style.height = `${availableHeight}px`;
+
+                // const offsetFromTop = Math.max(0, textareaRect.top);
+                // const availableHeight = windowHeight - offsetFromTop - 20;
+                // const targetHeight = Math.min(windowHeight - 40, Math.max(300, availableHeight));
+                // this.style.height = `${targetHeight}px`;
+
+                // Автоматически подстраиваем высоту под контент
+                // this.style.height = 'auto';
+                // const scrollHeight = this.scrollHeight;
+                // this.style.height = `${Math.max(300, scrollHeight)}px`;
+                // this.style.overflowY = 'visible'; // ← Отключить скролл внутри поля
+
+                this.style.height = 'auto';
+                const windowHeight = window.innerHeight;
+                const maxHeight = windowHeight * 0.8;
+                const scrollHeight = this.scrollHeight;
+                this.style.height = `${Math.min(scrollHeight, maxHeight)}px`;
+                this.style.overflowY = 'auto'; // ← Включаем внутренний скроллбар
+            }
+            
+            document.querySelectorAll('.sentence-item.copied').forEach(item => {
+                item.classList.remove('copied');
+            });
+            
+            if (hasText) {
+                processText(false);
+                if (!isTextareaExpanded) {
+                    setAdaptiveHeight(this);
+                }
+            } else {
+                textOutputTemp.innerHTML = '';
+                textOutputResult.innerHTML = '';
+                updateTextOutputResultHeight();
+            }
+            
+            this.classList.remove('scroll-visible');
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+                // scrollTimeout = null;
+            }
+            // isHoveringScrollbar = false;
+        });
+
+        window.addEventListener('load', () => {
+            const textarea = document.getElementById('textInput');
+            setAdaptiveHeight(textarea);
+            // setupScrollOnHover(textarea);
+            
+            // Инициализируем data-атрибут
+            textarea.dataset.hasScroll = 'false';
+        });
+
+        // Настраиваем только кнопку для textInput
         setupToggle(toggleBtn, 'textInput');
-        setupToggle(toggleBtn2, 'textOutputTemp');
 
         clearBtn.addEventListener('click', () => {
             textInput.value = '';
-            textOutputTemp.value = '';
+            textOutputTemp.innerHTML = '';
             textOutputResult.innerHTML = '';
             inputNum.value = '';
             inputError.style.display = 'none';
             
             currentCopiedBlock = null;
+            isTextareaExpanded = false;
+            toggleBtn.textContent = 'Развернуть';
+            sidePanelWrap?.classList.remove('sticky');
 
             updateStats(0, 0);            
             updateCharCount();
-            updateTextOutputTempBackground();
             updateTextOutputResultHeight();
             
             toggleBtn.disabled = true;
             clearBtn.disabled = true;
             toggleBtn2.disabled = true;
+            
+            const textarea = document.getElementById('textInput');
+            setAdaptiveHeight(textarea);
+            // textarea.classList.remove('scroll-visible');
+            textarea.dataset.hasScroll = 'false';
+            // isHoveringScrollbar = false;
         });
 
         inputNum.addEventListener('focus', () => {
@@ -953,32 +1297,8 @@
             }
         });
 
-        textInput.addEventListener('input', () => {
-            const hasText = textInput.value.trim() !== '';
-            toggleBtn.disabled = !hasText;
-            clearBtn.disabled = !hasText;
-            toggleBtn2.disabled = !hasText;
-            updateCharCount();
-            
-            textOutputTemp.classList.remove('copied');
-            
-            if (hasText) {
-                processText(false);
-            } else {
-                textOutputTemp.value = '';
-                textOutputResult.innerHTML = '';
-                updateTextOutputTempBackground();
-                updateTextOutputResultHeight();
-            }
-        });
-
-        textOutputTemp.addEventListener('input', () => {
-            updateTextOutputTempBackground();
-        });
-
         // ============ ИНИЦИАЛИЗАЦИЯ ============
         updateCharCount();
-        updateTextOutputTempBackground();
         updateTextOutputResultHeight();
     </script>
 </body>
